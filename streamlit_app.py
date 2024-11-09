@@ -1,53 +1,57 @@
 import streamlit as st
+import pandas as pd
+import folium
+from folium.plugins import MarkerCluster
+from geopy.geocoders import Nominatim
 
-# Set up the sidebar with three options: Analysis, Prediction, Decision
-st.sidebar.title("Navigation")
-menu = st.sidebar.radio("Choose a section:", ["Analysis", "Prediction", "Decision"])
+# Geolocator to get the latitude and longitude of each country
+geolocator = Nominatim(user_agent="emission_map")
 
-# Analysis Section
-if menu == "Analysis":
-    st.title("Data Analysis")
-    st.write("In this section, you can analyze your data.")
-    
-    # Example analysis - user can upload a dataset
-    uploaded_file = st.file_uploader("Upload your dataset", type=["csv", "xlsx"])
-    if uploaded_file:
-        import pandas as pd
-        data = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-        st.write("Here's a preview of your data:")
-        st.dataframe(data.head())
+def get_location(country):
+    location = geolocator.geocode(country)
+    if location:
+        return location.latitude, location.longitude
+    return None, None
 
-        # Display basic statistics
-        if st.checkbox("Show basic statistics"):
-            st.write(data.describe())
+# Streamlit app layout
+st.title('Carbon Emission Visualization')
 
-# Prediction Section
-elif menu == "Prediction":
-    st.title("Prediction")
-    st.write("This section allows you to make predictions based on the data.")
-    
-    # Example prediction input
-    st.write("Provide input values for prediction:")
-    input_val1 = st.number_input("Input Value 1", min_value=0.0, max_value=100.0, value=50.0)
-    input_val2 = st.number_input("Input Value 2", min_value=0.0, max_value=100.0, value=50.0)
-    
-    if st.button("Predict"):
-        # Placeholder for prediction logic
-        prediction_result = input_val1 + input_val2  # replace with model's prediction logic
-        st.write(f"Prediction result: {prediction_result}")
+# File upload section
+uploaded_file = st.file_uploader("Upload your emission data file", type=["csv", "xlsx"])
 
-# Decision Section
-elif menu == "Decision":
-    st.title("Decision Support")
-    st.write("This section provides decision-making support.")
+if uploaded_file is not None:
+    # Read the file (handle CSV or Excel files)
+    if uploaded_file.name.endswith("csv"):
+        df = pd.read_csv(uploaded_file)
+    elif uploaded_file.name.endswith("xlsx"):
+        df = pd.read_excel(uploaded_file)
     
-    # Example decision-making criteria
-    st.write("Select the criteria for decision-making:")
-    criteria1 = st.selectbox("Criterion 1", ["Option A", "Option B", "Option C"])
-    criteria2 = st.slider("Criterion 2 importance", 0, 10, 5)
-    
-    if st.button("Make Decision"):
-        # Placeholder for decision-making logic
-        decision = f"Decision based on {criteria1} with importance level {criteria2}"
-        st.write(f"Decision outcome: {decision}")
+    # Check if the file has the required columns
+    if 'country' not in df.columns or 'date' not in df.columns or 'emission_value' not in df.columns:
+        st.error("The file must contain 'country', 'date', and 'emission_value' columns.")
+    else:
+        # Display the data table
+        st.write("Emission Data", df)
+        
+        # Create the map
+        m = folium.Map(location=[20,0], zoom_start=2)
+
+        # Add markers for each country
+        marker_cluster = MarkerCluster().add_to(m)
+
+        for index, row in df.iterrows():
+            lat, lon = get_location(row['country'])
+            if lat and lon:
+                folium.Marker(
+                    location=[lat, lon],
+                    popup=f"{row['country']} - {row['emission_value']} tons",
+                    icon=folium.Icon(color='blue')
+                ).add_to(marker_cluster)
+
+        # Display the map
+        st.write("Carbon Emission Map")
+        st.components.v1.html(m._repr_html_(), height=500)
+
+else:
+    st.info("Please upload a CSV or Excel file to begin.")
 
